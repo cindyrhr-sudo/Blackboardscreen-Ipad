@@ -82,10 +82,10 @@
         #workspace { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
         #board-area { flex-grow: 1; position: relative; touch-action: none; overflow: hidden; min-height: 0; }
 
-        #board-canvas { position: absolute; inset: 0; z-index: 900; touch-action: none; pointer-events: none; }
+        #board-canvas { position: absolute; inset: 0; z-index: 900; touch-action: none; pointer-events: none; -webkit-user-select: none; user-select: none; }
         #board-canvas.active { pointer-events: auto; }
 
-        #text-layer { position: absolute; inset: 0; z-index: 800; pointer-events: none; }
+        #text-layer { position: absolute; inset: 0; z-index: 800; pointer-events: none; -webkit-user-select: none; user-select: none; }
         .text-note { position: absolute; min-width: 30px; min-height: 30px; pointer-events: auto; }
         .note-content {
             outline: none; padding: 4px 10px; font-family: 'Andika', sans-serif;
@@ -370,6 +370,7 @@
         if (mode !== 'stift') return;
         if (drawing) return; // schon eine Berührung aktiv -> weitere (z.B. Handballen) ignorieren
         if (penOnlyMode && e.pointerType === 'touch') return; // nur Apple Pencil (und Maus zum Testen) zeichnet
+        e.preventDefault();
         drawing = true;
         activePointerId = e.pointerId;
         const p = getPos(e);
@@ -378,6 +379,7 @@
     });
     canvas.addEventListener('pointermove', (e) => {
         if (!drawing || mode !== 'stift' || e.pointerId !== activePointerId) return;
+        e.preventDefault();
         const p = getPos(e);
         ctx.globalCompositeOperation = boardPen.eraser ? 'destination-out' : 'source-over';
         ctx.strokeStyle = boardPen.eraser ? 'rgba(0,0,0,1)' : boardPen.color;
@@ -388,6 +390,11 @@
     function endStroke(e) { if (e.pointerId === activePointerId) { drawing = false; activePointerId = null; } }
     canvas.addEventListener('pointerup', endStroke);
     canvas.addEventListener('pointercancel', endStroke);
+
+    // Zusätzliche Absicherung: Safaris native Auswahl-/Lupen-Geste bei langsamen
+    // Berührungen oder einer zweiten gleichzeitigen Berührung komplett unterbinden
+    canvas.addEventListener('touchstart', (e) => { if (mode === 'stift') e.preventDefault(); }, { passive: false });
+    canvas.addEventListener('touchmove', (e) => { if (mode === 'stift') e.preventDefault(); }, { passive: false });
 
     let noteCounter = 0;
     let textStyle = { bold: false, italic: false, size: 34 };
