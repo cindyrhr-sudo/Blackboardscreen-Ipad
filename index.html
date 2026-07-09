@@ -287,6 +287,7 @@
     const ctx = canvas.getContext('2d');
     const boardArea = document.getElementById('board-area');
     const textLayer = document.getElementById('text-layer');
+    let logicalW = 0, logicalH = 0;
 
     function buildColorGrid() {
         const grid = document.getElementById('color-grid');
@@ -309,7 +310,7 @@
 
     function clearBoard() {
         if (confirm('Tinte auf dieser Tafel wirklich löschen? (Objekte und Notizen bleiben erhalten)')) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.clearRect(0, 0, logicalW, logicalH);
         }
     }
 
@@ -332,12 +333,18 @@
     }
 
     function resizeBoardCanvas() {
+        const dpr = window.devicePixelRatio || 1;
         const snapshot = canvas.width && canvas.height ? canvas.toDataURL() : null;
-        const w = boardArea.offsetWidth, h = boardArea.offsetHeight;
-        canvas.width = w; canvas.height = h;
+        logicalW = boardArea.offsetWidth; logicalH = boardArea.offsetHeight;
+        canvas.width = Math.round(logicalW * dpr);
+        canvas.height = Math.round(logicalH * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         if (snapshot) {
             const img = new Image();
-            img.onload = () => ctx.drawImage(img, 0, 0, w, h);
+            img.onload = () => {
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.drawImage(img, 0, 0, logicalW, logicalH);
+            };
             img.src = snapshot;
         }
     }
@@ -677,7 +684,10 @@
         (state.notes || []).forEach(n => createTextNote(n.x, n.y, n));
         if (state.ink) {
             const img = new Image();
-            img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            img.onload = () => {
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.drawImage(img, 0, 0, logicalW, logicalH);
+            };
             img.src = state.ink;
         }
     }
@@ -686,7 +696,8 @@
         document.querySelectorAll('.widget').forEach(w => w.remove());
         document.getElementById('kindergarten').innerHTML = '';
         document.querySelectorAll('.text-note').forEach(n => n.remove());
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.clearRect(0, 0, logicalW, logicalH);
         timers = {}; wheelData = {};
     }
 
