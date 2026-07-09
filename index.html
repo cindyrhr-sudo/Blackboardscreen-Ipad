@@ -338,6 +338,8 @@
         logicalW = boardArea.offsetWidth; logicalH = boardArea.offsetHeight;
         canvas.width = Math.round(logicalW * dpr);
         canvas.height = Math.round(logicalH * dpr);
+        canvas.style.width = logicalW + 'px';
+        canvas.style.height = logicalH + 'px';
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         if (snapshot) {
             const img = new Image();
