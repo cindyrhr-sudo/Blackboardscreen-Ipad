@@ -238,6 +238,12 @@
                 <label>Größe der Bedienelemente <span id="zoom-value">100%</span></label>
                 <input type="range" id="zoom-range" min="70" max="140" step="5" value="100" oninput="setUIZoom(this.value)">
             </div>
+
+            <h3>Eingabe</h3>
+            <div class="zoom-row" style="flex-direction:row; align-items:center; justify-content:space-between;">
+                <label style="margin:0;">Nur Apple Pencil zeichnet<br><span style="opacity:0.6; font-weight:normal;">(Handballenschutz)</span></label>
+                <input type="checkbox" id="pen-only-toggle" onchange="setPenOnly(this.checked)" style="width:22px; height:22px;">
+            </div>
         </div>
     </div>
 </div>
@@ -283,6 +289,7 @@
 
     let mode = 'stift';
     let boardPen = { color: '#ffffff', size: 8, eraser: false };
+    let penOnlyMode = true;
     const canvas = document.getElementById('board-canvas');
     const ctx = canvas.getContext('2d');
     const boardArea = document.getElementById('board-area');
@@ -354,19 +361,23 @@
     window.addEventListener('orientationchange', () => setTimeout(resizeBoardCanvas, 200));
 
     let drawing = false;
+    let activePointerId = null;
     function getPos(e) {
         const r = canvas.getBoundingClientRect();
         return { x: e.clientX - r.left, y: e.clientY - r.top };
     }
     canvas.addEventListener('pointerdown', (e) => {
         if (mode !== 'stift') return;
+        if (drawing) return; // schon eine Berührung aktiv -> weitere (z.B. Handballen) ignorieren
+        if (penOnlyMode && e.pointerType === 'touch') return; // nur Apple Pencil (und Maus zum Testen) zeichnet
         drawing = true;
+        activePointerId = e.pointerId;
         const p = getPos(e);
         ctx.beginPath(); ctx.moveTo(p.x, p.y);
         canvas.setPointerCapture(e.pointerId);
     });
     canvas.addEventListener('pointermove', (e) => {
-        if (!drawing || mode !== 'stift') return;
+        if (!drawing || mode !== 'stift' || e.pointerId !== activePointerId) return;
         const p = getPos(e);
         ctx.globalCompositeOperation = boardPen.eraser ? 'destination-out' : 'source-over';
         ctx.strokeStyle = boardPen.eraser ? 'rgba(0,0,0,1)' : boardPen.color;
@@ -374,8 +385,9 @@
         ctx.lineCap = 'round'; ctx.lineJoin = 'round';
         ctx.lineTo(p.x, p.y); ctx.stroke();
     });
-    canvas.addEventListener('pointerup', () => drawing = false);
-    canvas.addEventListener('pointercancel', () => drawing = false);
+    function endStroke(e) { if (e.pointerId === activePointerId) { drawing = false; activePointerId = null; } }
+    canvas.addEventListener('pointerup', endStroke);
+    canvas.addEventListener('pointercancel', endStroke);
 
     let noteCounter = 0;
     let textStyle = { bold: false, italic: false, size: 34 };
@@ -831,8 +843,19 @@
 
     // ---------- Einstellungen: Modal & Zoom ----------
     const ZOOM_KEY = 'kzb-ui-zoom';
+    const PEN_ONLY_KEY = 'kzb-pen-only';
     function openSettings() { document.getElementById('settings-overlay').classList.remove('hidden'); }
     function closeSettings() { document.getElementById('settings-overlay').classList.add('hidden'); }
+
+    function setPenOnly(val) {
+        penOnlyMode = val;
+        localStorage.setItem(PEN_ONLY_KEY, val ? '1' : '0');
+    }
+    function restorePenOnly() {
+        const saved = localStorage.getItem(PEN_ONLY_KEY);
+        penOnlyMode = saved === null ? true : saved === '1';
+        document.getElementById('pen-only-toggle').checked = penOnlyMode;
+    }
 
     function setUIZoom(val) {
         const pct = parseInt(val);
@@ -853,6 +876,7 @@
     setBoardSize(8);
     updateTextSubmenuUI();
     restoreUIZoom();
+    restorePenOnly();
 
     window.onload = () => {
         resizeBoardCanvas();
