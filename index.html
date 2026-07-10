@@ -225,14 +225,12 @@
 </div>
 
 <div id="sidebar" class="side-panel">
+        <div class="sidebar-divider"></div>
     <button class="side-btn mode-active" id="mode-stift" onclick="setMode('stift')" title="Stift">✏️</button>
     <button class="side-btn" id="mode-linie" onclick="setMode('linie')" title="Gerade Linie">╱</button>
     <button class="side-btn" id="btn-dashed" onclick="toggleDashed()" title="Gestrichelte Linie">┅</button>
     <button class="side-btn" id="mode-text" onclick="onTextModeClick()" title="Text">🔤</button>
     <button class="side-btn" id="mode-hand" onclick="setMode('hand')" title="Bewegen">✋</button>
-
-    <div class="sidebar-divider"></div>
-
     <button class="side-btn" onclick="createRuler()" title="Lineal einfügen">📏</button>
     <button class="side-btn" onclick="createGeoDreieck()" title="Geodreieck einfügen">📐</button>
 
@@ -259,11 +257,7 @@
     <button class="side-btn btn-small" onclick="setBoardSize(2)" id="size-2">•</button>
     <button class="side-btn btn-small" onclick="setBoardSize(8)" id="size-8">●</button>
     <button class="side-btn btn-small" onclick="setBoardSize(20)" id="size-20">⬤</button>
-    <button class="side-btn" id="btn-dashed" onclick="toggleDashed()" title="Gestrichelte Linie">┅</button>
     <button class="side-btn" id="btn-eraser" onclick="toggleEraser()" title="Radierer">🧽</button>
-
-    <div class="sidebar-divider"></div>
-
     <button class="side-btn" onclick="performUndo()" title="Rückgängig">↩️</button>
     <button class="side-btn" onclick="clearBoard()" title="Tinte löschen">🗑️</button>
 </div>
@@ -338,6 +332,7 @@
         <div id="page-tabs-list"></div>
     </div>
     <div class="sidebar-divider"></div>
+    <button class="side-btn" id="btn-sound-test" onclick="testAudio()" title="Ton &amp; Sprache aktivieren (lautlos)">🔊</button>
     <button class="side-btn btn-save" onclick="openSettings()" title="Einstellungen">⚙️</button>
     <input type="file" id="import-file-input" accept="application/json" style="display:none" onchange="importBoardFile(this)">
 </div>
@@ -386,10 +381,33 @@
         ensureAudioCtx();
         if ('speechSynthesis' in window) {
             window.speechSynthesis.cancel();
-            window.speechSynthesis.speak(new SpeechSynthesisUtterance('.'));
+            const warm = new SpeechSynthesisUtterance('.');
+            warm.volume = 0;
+            window.speechSynthesis.speak(warm);
         }
         document.getElementById('start-overlay').style.display = 'none';
         resizeBoardCanvas();
+    }
+
+    function testAudio() {
+        const ac = ensureAudioCtx();
+        try {
+            const osc = ac.createOscillator();
+            const gain = ac.createGain();
+            gain.gain.value = 0.00001; // technisch aktiv, aber praktisch unhörbar
+            osc.frequency.value = 440;
+            osc.connect(gain); gain.connect(ac.destination);
+            osc.start();
+            osc.stop(ac.currentTime + 0.05);
+        } catch (e) { /* ignore */ }
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.resume();
+            window.speechSynthesis.cancel();
+            const warm = new SpeechSynthesisUtterance('.');
+            warm.volume = 0;
+            window.speechSynthesis.speak(warm);
+        }
+        flashSideButton('btn-sound-test');
     }
 
     let mode = 'stift';
