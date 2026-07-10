@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Klassenzimmer-Board">
     <link rel="apple-touch-icon" href="icon-180.png">
-    <title>Klassenzimmer-Board 4.2 - iPad</title>
+    <title>Klassenzimmer-Board 4.3 - iPad</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Andika:ital,wght@0,400..700;1,400..700&family=Lora:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
@@ -18,6 +18,8 @@
             --board-bg: #1a252f; --sidebar-bg: #161b22; --accent: #27ae60;
             --sidebar-w: clamp(50px, 7vw, 74px);
             --ui-zoom: 1;
+            --geo-scale: 1;
+            --grid-size: 30px;
         }
         * { box-sizing: border-box; font-family: 'Andika', sans-serif; -webkit-tap-highlight-color: transparent; }
         html, body {
@@ -83,10 +85,44 @@
         #workspace { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
         #board-area { flex-grow: 1; position: relative; touch-action: none; overflow: hidden; min-height: 0; }
 
-        #board-canvas { position: absolute; inset: 0; z-index: 900; touch-action: none; pointer-events: none; -webkit-user-select: none; user-select: none; }
-        #board-canvas.active { pointer-events: auto; }
+        #bg-pattern {
+            position: absolute; inset: 0; z-index: 1; pointer-events: none;
+            background-size: var(--grid-size) var(--grid-size);
+        }
+        #bg-pattern.bg-kariert {
+            background-image:
+                linear-gradient(to right, rgba(255,255,255,0.18) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255,255,255,0.18) 1px, transparent 1px);
+        }
+        #bg-pattern.bg-liniert {
+            background-image: linear-gradient(to bottom, rgba(255,255,255,0.22) 1px, transparent 1px);
+            background-size: 100% var(--grid-size);
+        }
 
-        #text-layer { position: absolute; inset: 0; z-index: 800; pointer-events: none; -webkit-user-select: none; user-select: none; }
+        #tools-layer { position: absolute; inset: 0; z-index: 850; pointer-events: none; }
+        .tool-el { position: absolute; pointer-events: auto; touch-action: none; -webkit-user-select: none; user-select: none; }
+        .tool-el .rotatable { position: relative; transform: rotate(var(--rot, 0deg)); transform-origin: center center; }
+        .geo-el .rotatable { transform: rotate(var(--rot, 0deg)) scale(calc(var(--geo-scale, 1) * var(--inst-scale, 1))); }
+        .tool-drag, .tool-rotate-handle, .tool-del {
+            position: absolute; width: 26px; height: 26px; border-radius: 50%; color: white;
+            display: flex; align-items: center; justify-content: center; font-size: 14px; z-index: 5;
+            touch-action: none; -webkit-touch-callout: none; opacity: 0.75;
+        }
+        .tool-drag { background: rgba(0,0,0,0.55); cursor: move; top: -13px; left: -13px; }
+        .tool-rotate-handle { background: #2980b9; cursor: grab; top: -13px; right: -13px; }
+        .tool-del { background: #e74c3c; cursor: pointer; z-index: 6; bottom: -13px; left: -13px; }
+        .tool-resize { background: #8e44ad; cursor: nwse-resize; bottom: -13px; right: -13px; z-index: 6; }
+        .ruler-svg, .geo-svg { display: block; pointer-events: none; }
+        .geo-img { display: block; pointer-events: none; width: 340px; height: auto; -webkit-user-drag: none; user-select: none; }
+        .ruler-el .tool-controls {
+            position: absolute; left: 0; top: calc(100% + 6px); background: rgba(22,27,34,0.92);
+            padding: 8px 10px; border-radius: 10px; display: flex; flex-direction: column; gap: 5px;
+            font-size: 11px; color: white; width: 190px; z-index: 10; box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+        }
+        .ruler-el .tool-controls label { display: flex; justify-content: space-between; gap: 6px; align-items: center; }
+        .ruler-el .tool-controls input[type=range] { flex: 1; }
+
+        #text-layer { position: absolute; inset: 0; z-index: 5; pointer-events: none; -webkit-user-select: none; user-select: none; }
         .text-note { position: absolute; min-width: 30px; min-height: 30px; pointer-events: auto; }
         .note-content {
             outline: none; padding: 4px 10px; font-family: 'Andika', sans-serif;
@@ -101,8 +137,10 @@
         .note-delete { top: -13px; right: -13px; background: #e74c3c; cursor: pointer; }
         .text-note:focus-within .note-handle, .text-note:focus-within .note-delete { opacity: 0.9; }
 
+        #board-canvas { position: absolute; inset: 0; z-index: 900; touch-action: none; pointer-events: none; -webkit-user-select: none; user-select: none; }
+        #board-canvas.active { pointer-events: auto; }
+
         /* Seiten-Leiste (wie Tabellenblätter) */
-        /* Seiten (Tafeln) - vertikal in der rechten Sidebar */
         #page-tabs-vertical { display: flex; flex-direction: column; align-items: center; gap: clamp(4px, 1vw, 7px); width: 100%; flex: 1 1 0; min-height: 0; zoom: var(--ui-zoom); }
         #page-tabs-list { display: flex; flex-direction: column; gap: clamp(4px, 1vw, 6px); width: 100%; align-items: center; overflow-y: auto; flex-grow: 1; min-height: 0; touch-action: pan-y; }
         .page-tab {
@@ -149,13 +187,16 @@
         /* Einstellungen-Modal */
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 4000; display: flex; align-items: center; justify-content: center; }
         .modal-overlay.hidden { display: none; }
-        #settings-modal { background: var(--sidebar-bg); color: white; border-radius: 16px; width: min(380px, 88vw); max-height: 85vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.5); border: 2px solid var(--accent); }
+        #settings-modal { background: var(--sidebar-bg); color: white; border-radius: 16px; width: min(380px, 88vw); max-height: 85vh; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; box-shadow: 0 10px 40px rgba(0,0,0,0.5); border: 2px solid var(--accent); }
         .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,0.15); font-size: 17px; }
         .modal-header .header-icon { font-size: 20px; }
-        .modal-body { padding: 14px 18px 18px; display: flex; flex-direction: column; gap: 8px; }
+        .modal-body { padding: 14px 18px 18px; display: flex; flex-direction: column; gap: 8px; touch-action: pan-y; }
         .modal-body h3 { margin: 8px 0 0; font-size: 12px; opacity: 0.65; text-transform: uppercase; letter-spacing: 0.5px; }
         .settings-row { display: flex; align-items: center; gap: 10px; background: #33414f; color: white; border: none; border-radius: 10px; padding: 11px 14px; font-size: 15px; cursor: pointer; text-align: left; -webkit-touch-callout: none; }
         .settings-row:active { transform: scale(0.98); }
+        .settings-row.bg-type-btn.mode-active { background: var(--accent); }
+        .bg-type-row { display: flex; gap: 8px; }
+        .bg-type-row .settings-row { flex: 1; justify-content: center; }
         .zoom-row { display: flex; flex-direction: column; gap: 6px; background: #33414f; border-radius: 10px; padding: 11px 14px; }
         .zoom-row label { font-size: 14px; display: flex; justify-content: space-between; }
         .zoom-row input[type=range] { width: 100%; }
@@ -178,15 +219,21 @@
 <body>
 
 <div id="start-overlay">
-    <h1>Klassenzimmer-Board 4.2</h1>
+    <h1>Klassenzimmer-Board 4.3</h1>
     <p>Tippe auf den Button, um Ton &amp; Sprache zu aktivieren.</p>
     <button class="start-btn" onclick="initBoard()">Board aktivieren</button>
 </div>
 
 <div id="sidebar" class="side-panel">
     <button class="side-btn mode-active" id="mode-stift" onclick="setMode('stift')" title="Stift">✏️</button>
+    <button class="side-btn" id="mode-linie" onclick="setMode('linie')" title="Gerade Linie">╱</button>
     <button class="side-btn" id="mode-text" onclick="onTextModeClick()" title="Text">🔤</button>
     <button class="side-btn" id="mode-hand" onclick="setMode('hand')" title="Bewegen">✋</button>
+
+    <div class="sidebar-divider"></div>
+
+    <button class="side-btn" onclick="createRuler()" title="Lineal einfügen">📏</button>
+    <button class="side-btn" onclick="createGeoDreieck()" title="Geodreieck einfügen">📐</button>
 
     <div id="text-submenu" class="flyout-menu hidden">
         <div class="flyout-title">Text-Stil</div>
@@ -211,7 +258,12 @@
     <button class="side-btn btn-small" onclick="setBoardSize(2)" id="size-2">•</button>
     <button class="side-btn btn-small" onclick="setBoardSize(8)" id="size-8">●</button>
     <button class="side-btn btn-small" onclick="setBoardSize(20)" id="size-20">⬤</button>
+    <button class="side-btn" id="btn-dashed" onclick="toggleDashed()" title="Gestrichelte Linie">┅</button>
     <button class="side-btn" id="btn-eraser" onclick="toggleEraser()" title="Radierer">🧽</button>
+
+    <div class="sidebar-divider"></div>
+
+    <button class="side-btn" onclick="performUndo()" title="Rückgängig">↩️</button>
     <button class="side-btn" onclick="clearBoard()" title="Tinte löschen">🗑️</button>
 </div>
 
@@ -240,6 +292,23 @@
                 <input type="range" id="zoom-range" min="70" max="140" step="5" value="100" oninput="setUIZoom(this.value)">
             </div>
 
+            <h3>Geodreieck</h3>
+            <div class="zoom-row">
+                <label>Größe des Geodreiecks <span id="geo-scale-value">100%</span></label>
+                <input type="range" id="geo-scale-range" min="50" max="200" step="10" value="100" oninput="setGeoScale(this.value)">
+            </div>
+
+            <h3>Hintergrund der Tafel</h3>
+            <div class="bg-type-row">
+                <button class="settings-row bg-type-btn" data-bgtype="none" onclick="setBgType('none')">Keins</button>
+                <button class="settings-row bg-type-btn" data-bgtype="kariert" onclick="setBgType('kariert')">Kariert</button>
+                <button class="settings-row bg-type-btn" data-bgtype="liniert" onclick="setBgType('liniert')">Liniert</button>
+            </div>
+            <div class="zoom-row">
+                <label>Rastergröße <span id="grid-size-value">30px</span></label>
+                <input type="range" id="grid-size-range" min="15" max="80" step="5" value="30" oninput="setGridSize(this.value)">
+            </div>
+
             <h3>Eingabe</h3>
             <div class="zoom-row" style="flex-direction:row; align-items:center; justify-content:space-between;">
                 <label style="margin:0;">Nur Apple Pencil zeichnet<br><span style="opacity:0.6; font-weight:normal;">(Handballenschutz)</span></label>
@@ -251,7 +320,9 @@
 
 <div id="workspace">
     <div id="board-area">
+        <div id="bg-pattern"></div>
         <canvas id="board-canvas" class="active"></canvas>
+        <div id="tools-layer"></div>
         <div id="text-layer"></div>
     </div>
 </div>
@@ -278,18 +349,50 @@
     const palette = ['#ffffff', '#e74c3c', '#3498db', '#2ecc71', '#f1c40f', '#000000'];
     const STORAGE_KEY = 'kzb-board-state-v1';
 
-    const alarmAudio = new Audio('https://cdn.pixabay.com/audio/2022/03/15/audio_73147f3747.mp3');
-    alarmAudio.loop = true;
+    let audioCtx = null;
+    let alarmBeepInterval = null;
+
+    function ensureAudioCtx() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        return audioCtx;
+    }
+    function playBeepOnce() {
+        const ac = ensureAudioCtx();
+        const osc = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ac.currentTime);
+        gain.gain.setValueAtTime(0.0001, ac.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.5, ac.currentTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.35);
+        osc.connect(gain); gain.connect(ac.destination);
+        osc.start();
+        osc.stop(ac.currentTime + 0.4);
+    }
+    function startAlarmSound() {
+        stopAlarmSound();
+        playBeepOnce();
+        alarmBeepInterval = setInterval(playBeepOnce, 600);
+    }
+    function stopAlarmSound() {
+        if (alarmBeepInterval) { clearInterval(alarmBeepInterval); alarmBeepInterval = null; }
+    }
 
     function initBoard() {
-        alarmAudio.play().then(() => { alarmAudio.pause(); alarmAudio.currentTime = 0; }).catch(() => {});
-        window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+        ensureAudioCtx();
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(new SpeechSynthesisUtterance('.'));
+        }
         document.getElementById('start-overlay').style.display = 'none';
         resizeBoardCanvas();
     }
 
     let mode = 'stift';
-    let boardPen = { color: '#ffffff', size: 8, eraser: false };
+    let boardPen = { color: '#ffffff', size: 8, eraser: false, dashed: false };
     let penOnlyMode = true;
     const canvas = document.getElementById('board-canvas');
     const ctx = canvas.getContext('2d');
@@ -315,9 +418,11 @@
     }
     function toggleEraser() { boardPen.eraser = !boardPen.eraser; updateEraserUI(); }
     function updateEraserUI() { document.getElementById('btn-eraser').classList.toggle('tool-active', boardPen.eraser); }
+    function toggleDashed() { boardPen.dashed = !boardPen.dashed; document.getElementById('btn-dashed').classList.toggle('tool-active', boardPen.dashed); }
 
     function clearBoard() {
         if (confirm('Tinte auf dieser Tafel wirklich löschen? (Objekte und Notizen bleiben erhalten)')) {
+            pushUndoSnapshot();
             ctx.clearRect(0, 0, logicalW, logicalH);
         }
     }
@@ -325,9 +430,10 @@
     function setMode(m) {
         mode = m;
         document.getElementById('mode-stift').classList.toggle('mode-active', m === 'stift');
+        document.getElementById('mode-linie').classList.toggle('mode-active', m === 'linie');
         document.getElementById('mode-text').classList.toggle('mode-active', m === 'text');
         document.getElementById('mode-hand').classList.toggle('mode-active', m === 'hand');
-        canvas.classList.toggle('active', m === 'stift');
+        canvas.classList.toggle('active', m === 'stift' || m === 'linie');
         if (m !== 'text') document.getElementById('text-submenu').classList.add('hidden');
     }
 
@@ -357,45 +463,84 @@
             };
             img.src = snapshot;
         }
+        undoStack = []; // Größe geändert -> alte Snapshots passen nicht mehr
     }
     window.addEventListener('resize', resizeBoardCanvas);
     window.addEventListener('orientationchange', () => setTimeout(resizeBoardCanvas, 200));
 
+    // ---------- Rückgängig (Undo) ----------
+    let undoStack = [];
+    const MAX_UNDO = 20;
+    function pushUndoSnapshot() {
+        try {
+            const snap = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            undoStack.push(snap);
+            if (undoStack.length > MAX_UNDO) undoStack.shift();
+        } catch (e) { /* ignore */ }
+    }
+    function performUndo() {
+        if (undoStack.length === 0) return;
+        const snap = undoStack.pop();
+        ctx.putImageData(snap, 0, 0);
+    }
+
     let drawing = false;
     let activePointerId = null;
+    let lineStartPos = null;
+    let lineSnapshot = null;
     function getPos(e) {
         const r = canvas.getBoundingClientRect();
         return { x: e.clientX - r.left, y: e.clientY - r.top };
     }
     canvas.addEventListener('pointerdown', (e) => {
-        if (mode !== 'stift') return;
+        if (mode !== 'stift' && mode !== 'linie') return;
         if (drawing) return; // schon eine Berührung aktiv -> weitere (z.B. Handballen) ignorieren
         if (penOnlyMode && e.pointerType === 'touch') return; // nur Apple Pencil (und Maus zum Testen) zeichnet
         e.preventDefault();
         drawing = true;
         activePointerId = e.pointerId;
         const p = getPos(e);
-        ctx.beginPath(); ctx.moveTo(p.x, p.y);
+        pushUndoSnapshot();
+        if (mode === 'linie') {
+            lineStartPos = p;
+            lineSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        } else {
+            ctx.beginPath(); ctx.moveTo(p.x, p.y);
+        }
         canvas.setPointerCapture(e.pointerId);
     });
     canvas.addEventListener('pointermove', (e) => {
-        if (!drawing || mode !== 'stift' || e.pointerId !== activePointerId) return;
+        if (!drawing || e.pointerId !== activePointerId) return;
         e.preventDefault();
         const p = getPos(e);
         ctx.globalCompositeOperation = boardPen.eraser ? 'destination-out' : 'source-over';
         ctx.strokeStyle = boardPen.eraser ? 'rgba(0,0,0,1)' : boardPen.color;
         ctx.lineWidth = boardPen.eraser ? boardPen.size * 3 : boardPen.size;
         ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-        ctx.lineTo(p.x, p.y); ctx.stroke();
+        ctx.setLineDash((boardPen.dashed && !boardPen.eraser) ? [boardPen.size * 2.2, boardPen.size * 1.6] : []);
+        if (mode === 'linie') {
+            ctx.putImageData(lineSnapshot, 0, 0);
+            ctx.beginPath();
+            ctx.moveTo(lineStartPos.x, lineStartPos.y);
+            ctx.lineTo(p.x, p.y);
+            ctx.stroke();
+        } else {
+            ctx.lineTo(p.x, p.y); ctx.stroke();
+        }
     });
-    function endStroke(e) { if (e.pointerId === activePointerId) { drawing = false; activePointerId = null; } }
+    function endStroke(e) {
+        if (e.pointerId === activePointerId) {
+            drawing = false; activePointerId = null; lineStartPos = null; lineSnapshot = null;
+            ctx.setLineDash([]);
+        }
+    }
     canvas.addEventListener('pointerup', endStroke);
     canvas.addEventListener('pointercancel', endStroke);
 
     // Zusätzliche Absicherung: Safaris native Auswahl-/Lupen-Geste bei langsamen
     // Berührungen oder einer zweiten gleichzeitigen Berührung komplett unterbinden
-    canvas.addEventListener('touchstart', (e) => { if (mode === 'stift') e.preventDefault(); }, { passive: false });
-    canvas.addEventListener('touchmove', (e) => { if (mode === 'stift') e.preventDefault(); }, { passive: false });
+    canvas.addEventListener('touchstart', (e) => { if (mode === 'stift' || mode === 'linie') e.preventDefault(); }, { passive: false });
+    canvas.addEventListener('touchmove', (e) => { if (mode === 'stift' || mode === 'linie') e.preventDefault(); }, { passive: false });
 
     let noteCounter = 0;
     let textStyle = { bold: false, italic: false, size: 34 };
@@ -432,7 +577,7 @@
 
     boardArea.addEventListener('pointerdown', (e) => {
         if (mode !== 'text') return;
-        if (e.target.closest('.widget') || e.target.closest('.text-note') || e.target.closest('#board-canvas')) return;
+        if (e.target.closest('.widget') || e.target.closest('.text-note') || e.target.closest('#board-canvas') || e.target.closest('.tool-el')) return;
         const r = boardArea.getBoundingClientRect();
         createTextNote(e.clientX - r.left, e.clientY - r.top, { focus: true });
     });
@@ -611,21 +756,30 @@
     }
     function pauseTimer(id) { clearInterval(timers[id].interval); timers[id].interval = null; }
 
+    function speakAnnouncement(text) {
+        if (!('speechSynthesis' in window)) return;
+        try {
+            window.speechSynthesis.resume();
+            window.speechSynthesis.cancel();
+            const msg = new SpeechSynthesisUtterance(text);
+            msg.lang = 'de-DE';
+            const voices = window.speechSynthesis.getVoices();
+            const deVoice = voices.find(v => v.lang && v.lang.toLowerCase().startsWith('de'));
+            if (deVoice) msg.voice = deVoice;
+            window.speechSynthesis.speak(msg);
+        } catch (e) { console.error('Sprachausgabe fehlgeschlagen', e); }
+    }
+
     function startAlarmSequence(id) {
-        alarmAudio.currentTime = 0;
-        alarmAudio.play().catch(() => alert("Zeit abgelaufen!"));
+        startAlarmSound();
         document.getElementById('t-stop-' + id).style.display = 'block';
         if (document.getElementById('t-mode-' + id).value === "2") {
             const txt = document.getElementById('t-text-' + id).value || "Die Zeit ist abgelaufen";
-            const msg = new SpeechSynthesisUtterance(txt);
-            msg.lang = 'de-DE';
-            alarmAudio.volume = 0.4;
-            msg.onend = () => { alarmAudio.volume = 1.0; };
-            window.speechSynthesis.speak(msg);
+            speakAnnouncement(txt);
         }
     }
     function stopAlarm(id) {
-        alarmAudio.pause(); alarmAudio.currentTime = 0; alarmAudio.volume = 1.0;
+        stopAlarmSound();
         window.speechSynthesis.cancel();
         document.getElementById('t-stop-' + id).style.display = 'none';
     }
@@ -674,7 +828,245 @@
     }
     function closeWinner(id) { document.getElementById('winner-overlay-' + id).style.display = 'none'; }
 
-    // ---------- Zustand einer einzelnen Tafel (Widgets, Notizen, Tinte) ----------
+    // ---------- Geodreieck & Lineal ----------
+    const PX_PER_CM = 37.8;
+    let toolCounter = 0;
+
+    function buildRulerSVG(lenCm, scalePct) {
+        const scale = scalePct / 100;
+        const wPx = Math.max(40, Math.round(lenCm * PX_PER_CM));
+        const h = 70;
+        let ticks = '';
+        const stepsHalfCm = Math.round(lenCm * 2);
+        for (let i = 0; i <= stepsHalfCm; i++) {
+            const cm = i / 2;
+            const x = Math.round(cm * PX_PER_CM);
+            const isFullCm = Number.isInteger(cm);
+            const tickH = isFullCm ? 26 : 14;
+            ticks += `<line x1="${x}" y1="0" x2="${x}" y2="${tickH}" stroke="#222" stroke-width="1.5"/>`;
+            if (isFullCm) ticks += `<text x="${x + 2}" y="${tickH + 14}" font-size="12" fill="#222">${cm}</text>`;
+        }
+        return `<svg class="ruler-svg" width="${Math.round(wPx * scale)}" height="${Math.round(h * scale)}" viewBox="0 0 ${wPx} ${h}">
+            <rect x="0" y="0" width="${wPx}" height="${h}" fill="rgba(255,247,220,0.88)" stroke="#333" stroke-width="2"/>
+            ${ticks}
+        </svg>`;
+    }
+
+    function createRuler(config = {}) {
+        const id = config.id || 'ruler-' + (Date.now() + (toolCounter++));
+        const lenCm = config.lenCm !== undefined ? parseFloat(config.lenCm) : 20;
+        const scalePct = config.scale !== undefined ? parseInt(config.scale) : 100;
+        const el = document.createElement('div');
+        el.className = 'tool-el ruler-el';
+        el.id = id;
+        el.style.left = (config.x !== undefined ? config.x : 150) + 'px';
+        el.style.top = (config.y !== undefined ? config.y : 150) + 'px';
+        el.style.setProperty('--rot', (config.rot || 0) + 'deg');
+        el.dataset.rot = config.rot || 0;
+        el.dataset.lencm = lenCm;
+        el.dataset.scale = scalePct;
+        el.innerHTML = `
+            <div class="rotatable">
+                <div class="tool-drag" data-drag>⠿</div>
+                <div class="tool-rotate-handle" data-rotate>⟲</div>
+                <div class="ruler-body" id="body-${id}">${buildRulerSVG(lenCm, scalePct)}</div>
+                <div class="tool-resize" data-resize-corner>⤡</div>
+            </div>
+            <div class="tool-del" onclick="removeTool('${id}')">×</div>
+            <div class="tool-controls">
+                <label>Länge <span id="lendisp-${id}">${lenCm}cm</span></label>
+                <input type="range" min="5" max="50" step="0.5" value="${lenCm}" oninput="updateRulerLen('${id}', this.value)">
+                <label>Größe <span id="scaledisp-${id}">${scalePct}%</span></label>
+                <input type="range" id="scaleinput-${id}" min="50" max="200" step="10" value="${scalePct}" oninput="updateRulerScale('${id}', this.value)">
+            </div>`;
+        document.getElementById('tools-layer').appendChild(el);
+        bindToolDrag(el);
+        bindToolRotate(el);
+        bindToolResize(el, {
+            getScale: () => parseInt(el.dataset.scale),
+            setScale: (v) => {
+                v = Math.max(50, Math.min(200, v));
+                updateRulerScale(id, v);
+                const slider = document.getElementById('scaleinput-' + id);
+                if (slider) slider.value = v;
+            }
+        });
+        if (config.isNew) toggleMenu();
+        return el;
+    }
+    function updateRulerLen(id, val) {
+        const el = document.getElementById(id);
+        el.dataset.lencm = val;
+        document.getElementById('lendisp-' + id).innerText = val + 'cm';
+        document.getElementById('body-' + id).innerHTML = buildRulerSVG(parseFloat(val), parseInt(el.dataset.scale));
+    }
+    function updateRulerScale(id, val) {
+        const el = document.getElementById(id);
+        el.dataset.scale = val;
+        document.getElementById('scaledisp-' + id).innerText = val + '%';
+        document.getElementById('body-' + id).innerHTML = buildRulerSVG(parseFloat(el.dataset.lencm), parseInt(val));
+    }
+
+    function buildGeoSVG() {
+        let ticks = '';
+        for (let cm = 0; cm <= 10; cm += 0.5) {
+            const x = 40 + cm * 32;
+            const full = Number.isInteger(cm);
+            ticks += `<line x1="${x}" y1="200" x2="${x}" y2="${200 - (full ? 16 : 9)}" stroke="#222" stroke-width="1.2"/>`;
+            if (full) ticks += `<text x="${x - 4}" y="185" font-size="10" fill="#222">${cm}</text>`;
+        }
+        let deg = '';
+        for (let a = 0; a <= 180; a += 10) {
+            const rad = (Math.PI * a) / 180;
+            const r1 = 140, r2 = (a % 30 === 0) ? 122 : 130;
+            const cx = 200, cy = 200;
+            const x1 = cx - r1 * Math.cos(rad), y1 = cy - r1 * Math.sin(rad);
+            const x2 = cx - r2 * Math.cos(rad), y2 = cy - r2 * Math.sin(rad);
+            deg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#c0392b" stroke-width="1"/>`;
+            if (a % 30 === 0) {
+                const xl = cx - 108 * Math.cos(rad), yl = cy - 108 * Math.sin(rad);
+                deg += `<text x="${xl}" y="${yl}" font-size="9" fill="#c0392b" text-anchor="middle">${a}</text>`;
+            }
+        }
+        return `<svg class="geo-svg" width="400" height="200" viewBox="0 0 400 200">
+            <polygon points="0,200 400,200 200,0" fill="rgba(180,222,255,0.38)" stroke="#1b3a57" stroke-width="2.5"/>
+            ${ticks}
+            <path d="M 60 200 A 140 140 0 0 1 340 200" fill="none" stroke="#c0392b" stroke-width="1.2" opacity="0.6"/>
+            ${deg}
+        </svg>`;
+    }
+    const GEO_SVG_CACHE = buildGeoSVG();
+    const GEO_PNG_FILENAME = 'geodreieck.png';
+
+    function handleGeoImgError(imgEl) {
+        const wrap = document.createElement('div');
+        wrap.innerHTML = GEO_SVG_CACHE;
+        imgEl.replaceWith(wrap.firstElementChild);
+    }
+
+    function createGeoDreieck(config = {}) {
+        const id = config.id || 'geo-' + (Date.now() + (toolCounter++));
+        const instScale = config.instScale !== undefined ? parseInt(config.instScale) : 100;
+        const el = document.createElement('div');
+        el.className = 'tool-el geo-el';
+        el.id = id;
+        el.style.left = (config.x !== undefined ? config.x : 200) + 'px';
+        el.style.top = (config.y !== undefined ? config.y : 120) + 'px';
+        el.style.setProperty('--rot', (config.rot || 0) + 'deg');
+        el.style.setProperty('--inst-scale', instScale / 100);
+        el.dataset.rot = config.rot || 0;
+        el.dataset.instScale = instScale;
+        el.innerHTML = `
+            <div class="rotatable">
+                <div class="tool-drag" data-drag>⠿</div>
+                <div class="tool-rotate-handle" data-rotate>⟲</div>
+                <img class="geo-img" src="${GEO_PNG_FILENAME}" draggable="false" onerror="handleGeoImgError(this)">
+                <div class="tool-resize" data-resize-corner>⤡</div>
+            </div>
+            <div class="tool-del" onclick="removeTool('${id}')">×</div>`;
+        document.getElementById('tools-layer').appendChild(el);
+        bindToolDrag(el);
+        bindToolRotate(el);
+        bindToolResize(el, {
+            getScale: () => parseInt(el.dataset.instScale),
+            setScale: (v) => {
+                v = Math.max(30, Math.min(300, v));
+                el.dataset.instScale = v;
+                el.style.setProperty('--inst-scale', v / 100);
+            }
+        });
+        if (config.isNew) toggleMenu();
+        return el;
+    }
+
+    function removeTool(id) { const el = document.getElementById(id); if (el) el.remove(); }
+
+    function bindToolDrag(el) {
+        const handle = el.querySelector('[data-drag]');
+        handle.addEventListener('pointerdown', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            handle.setPointerCapture(e.pointerId);
+            const sX = e.clientX - el.offsetLeft, sY = e.clientY - el.offsetTop;
+            const move = (m) => { el.style.left = (m.clientX - sX) + 'px'; el.style.top = (m.clientY - sY) + 'px'; };
+            const stop = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', stop); };
+            handle.addEventListener('pointermove', move);
+            handle.addEventListener('pointerup', stop);
+        });
+    }
+    function bindToolRotate(el) {
+        const handle = el.querySelector('[data-rotate]');
+        handle.addEventListener('pointerdown', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            handle.setPointerCapture(e.pointerId);
+            const move = (m) => {
+                const rect = el.getBoundingClientRect();
+                const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+                const angle = Math.atan2(m.clientY - cy, m.clientX - cx) * 180 / Math.PI;
+                const rot = Math.round(angle + 90);
+                el.style.setProperty('--rot', rot + 'deg');
+                el.dataset.rot = rot;
+            };
+            const stop = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', stop); };
+            handle.addEventListener('pointermove', move);
+            handle.addEventListener('pointerup', stop);
+        });
+    }
+
+    function bindToolResize(el, api) {
+        const handle = el.querySelector('[data-resize-corner]');
+        if (!handle) return;
+        handle.addEventListener('pointerdown', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            handle.setPointerCapture(e.pointerId);
+            const rect = el.getBoundingClientRect();
+            const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+            const d0 = Math.hypot(e.clientX - cx, e.clientY - cy) || 1;
+            const startScale = api.getScale();
+            const move = (m) => {
+                const d1 = Math.hypot(m.clientX - cx, m.clientY - cy);
+                const factor = d1 / d0;
+                const newScale = Math.round(startScale * factor);
+                api.setScale(newScale);
+            };
+            const stop = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', stop); };
+            handle.addEventListener('pointermove', move);
+            handle.addEventListener('pointerup', stop);
+        });
+    }
+
+    // ---------- Hintergrund (Kariert / Liniert) ----------
+    function setBgType(type) {
+        const layer = document.getElementById('bg-pattern');
+        layer.classList.remove('bg-kariert', 'bg-liniert');
+        if (type === 'kariert') layer.classList.add('bg-kariert');
+        if (type === 'liniert') layer.classList.add('bg-liniert');
+        localStorage.setItem('kzb-bg-type', type);
+        document.querySelectorAll('.bg-type-btn').forEach(b => b.classList.toggle('mode-active', b.dataset.bgtype === type));
+    }
+    function setGridSize(val) {
+        document.documentElement.style.setProperty('--grid-size', val + 'px');
+        document.getElementById('grid-size-value').innerText = val + 'px';
+        localStorage.setItem('kzb-bg-size', val);
+    }
+    function restoreBgSettings() {
+        const type = localStorage.getItem('kzb-bg-type') || 'none';
+        const size = localStorage.getItem('kzb-bg-size') || '30';
+        setBgType(type);
+        document.getElementById('grid-size-range').value = size;
+        setGridSize(size);
+    }
+    function setGeoScale(val) {
+        document.documentElement.style.setProperty('--geo-scale', val / 100);
+        document.getElementById('geo-scale-value').innerText = val + '%';
+        localStorage.setItem('kzb-geo-scale', val);
+    }
+    function restoreGeoScale() {
+        const val = localStorage.getItem('kzb-geo-scale') || '100';
+        document.getElementById('geo-scale-range').value = val;
+        setGeoScale(val);
+    }
+
+    // ---------- Zustand einer einzelnen Tafel (Widgets, Notizen, Tinte, Werkzeuge) ----------
     function gatherState() {
         const widgetData = [];
         document.querySelectorAll('.widget').forEach(w => {
@@ -698,12 +1090,22 @@
                 bold: content.style.fontWeight === 'bold', italic: content.style.fontStyle === 'italic'
             });
         });
-        return { widgets: widgetData, notes: noteData, ink: canvas.toDataURL('image/png') };
+        const rulerData = [];
+        document.querySelectorAll('.ruler-el').forEach(r => {
+            rulerData.push({ id: r.id, x: parseInt(r.style.left), y: parseInt(r.style.top), rot: parseInt(r.dataset.rot) || 0, lenCm: parseFloat(r.dataset.lencm), scale: parseInt(r.dataset.scale) });
+        });
+        const geoData = [];
+        document.querySelectorAll('.geo-el').forEach(g => {
+            geoData.push({ id: g.id, x: parseInt(g.style.left), y: parseInt(g.style.top), rot: parseInt(g.dataset.rot) || 0, instScale: parseInt(g.dataset.instScale) || 100 });
+        });
+        return { widgets: widgetData, notes: noteData, rulers: rulerData, geos: geoData, ink: canvas.toDataURL('image/png') };
     }
 
     function restoreState(state) {
         (state.widgets || []).forEach(c => createWidget(c.type, c));
         (state.notes || []).forEach(n => createTextNote(n.x, n.y, n));
+        (state.rulers || []).forEach(r => createRuler(r));
+        (state.geos || []).forEach(g => createGeoDreieck(g));
         if (state.ink) {
             const img = new Image();
             img.onload = () => {
@@ -718,13 +1120,14 @@
         document.querySelectorAll('.widget').forEach(w => w.remove());
         document.getElementById('kindergarten').innerHTML = '';
         document.querySelectorAll('.text-note').forEach(n => n.remove());
+        document.querySelectorAll('.ruler-el, .geo-el').forEach(t => t.remove());
         ctx.globalCompositeOperation = 'source-over';
         ctx.clearRect(0, 0, logicalW, logicalH);
-        timers = {}; wheelData = {};
+        timers = {}; wheelData = {}; undoStack = [];
     }
 
     // ---------- Mehrere Tafeln (Seiten) ----------
-    function defaultPage(name) { return { id: 'page-' + Date.now() + Math.floor(Math.random() * 1000), name: name || 'Tafel 1', state: { widgets: [], notes: [], ink: null } }; }
+    function defaultPage(name) { return { id: 'page-' + Date.now() + Math.floor(Math.random() * 1000), name: name || 'Tafel 1', state: { widgets: [], notes: [], rulers: [], geos: [], ink: null } }; }
     let pages = [defaultPage('Tafel 1')];
     let currentPageIndex = 0;
 
@@ -800,7 +1203,7 @@
 
     function restoreFullDocument(doc) {
         clearWorkspaceForImport();
-        pages = (doc.pages || []).map(p => ({ id: p.id || ('page-' + Date.now() + Math.random()), name: p.name || 'Tafel', state: p.state || { widgets: [], notes: [], ink: null } }));
+        pages = (doc.pages || []).map(p => ({ id: p.id || ('page-' + Date.now() + Math.random()), name: p.name || 'Tafel', state: p.state || { widgets: [], notes: [], rulers: [], geos: [], ink: null } }));
         if (pages.length === 0) pages = [defaultPage('Tafel 1')];
         currentPageIndex = Math.min(doc.currentPageIndex || 0, pages.length - 1);
         restoreState(pages[currentPageIndex].state);
@@ -885,6 +1288,8 @@
     updateTextSubmenuUI();
     restoreUIZoom();
     restorePenOnly();
+    restoreGeoScale();
+    restoreBgSettings();
 
     window.onload = () => {
         resizeBoardCanvas();
