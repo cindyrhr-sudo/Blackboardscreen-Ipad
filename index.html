@@ -103,14 +103,13 @@
         .tool-el { position: absolute; pointer-events: auto; touch-action: none; -webkit-user-select: none; user-select: none; }
         .tool-el .rotatable { position: relative; transform: rotate(var(--rot, 0deg)); transform-origin: center center; }
         .geo-el .rotatable { transform: rotate(var(--rot, 0deg)) scale(var(--geo-scale, 1)); }
-        .tool-drag, .tool-rotate-handle, .tool-del {
+        .tool-drag, .tool-rotate-handle {
             position: absolute; width: 26px; height: 26px; border-radius: 50%; color: white;
             display: flex; align-items: center; justify-content: center; font-size: 14px; z-index: 5;
             touch-action: none; -webkit-touch-callout: none; opacity: 0.75;
         }
-        .tool-drag { background: rgba(0,0,0,0.55); cursor: move; top: -13px; left: -13px; }
+        .tool-drag { background: rgba(0,0,0,0.6); cursor: move; top: 50%; left: 50%; transform: translate(-50%, -50%); }
         .tool-rotate-handle { background: #2980b9; cursor: grab; top: -13px; right: -13px; }
-        .tool-del { background: #e74c3c; cursor: pointer; z-index: 6; bottom: -13px; left: -13px; }
         .ruler-svg, .geo-svg { display: block; pointer-events: none; }
         .geo-img { display: block; pointer-events: none; width: 340px; height: auto; -webkit-user-drag: none; user-select: none; }
 
@@ -224,8 +223,8 @@
 
     <div class="sidebar-divider"></div>
 
-    <button class="side-btn" onclick="createRuler()" title="Lineal einfügen">📏</button>
-    <button class="side-btn" onclick="createGeoDreieck()" title="Geodreieck einfügen">📐</button>
+    <button class="side-btn" id="btn-ruler-toggle" onclick="toggleRuler()" title="Lineal ein/aus">📏</button>
+    <button class="side-btn" id="btn-geo-toggle" onclick="toggleGeoDreieck()" title="Geodreieck ein/aus">📐</button>
 
     <div id="text-submenu" class="flyout-menu hidden">
         <div class="flyout-title">Text-Stil</div>
@@ -894,8 +893,7 @@
                 <div class="tool-drag" data-drag>⠿</div>
                 <div class="tool-rotate-handle" data-rotate>⟲</div>
                 <div class="ruler-body" id="body-${id}">${buildRulerSVG(rulerLenCm, rulerScalePct)}</div>
-            </div>
-            <div class="tool-del" onclick="removeTool('${id}')">×</div>`;
+            </div>`;
         document.getElementById('tools-layer').appendChild(el);
         bindToolDrag(el);
         bindToolRotate(el);
@@ -939,7 +937,7 @@
         </svg>`;
     }
     const GEO_SVG_CACHE = buildGeoSVG();
-    const GEO_PNG_FILENAME = 'geodreieck-dark.png';
+    const GEO_PNG_FILENAME = 'geodreieck.png';
 
     function handleGeoImgError(imgEl) {
         const wrap = document.createElement('div');
@@ -961,8 +959,7 @@
                 <div class="tool-drag" data-drag>⠿</div>
                 <div class="tool-rotate-handle" data-rotate>⟲</div>
                 <img class="geo-img" src="${GEO_PNG_FILENAME}" draggable="false" onerror="handleGeoImgError(this)">
-            </div>
-            <div class="tool-del" onclick="removeTool('${id}')">×</div>`;
+            </div>`;
         document.getElementById('tools-layer').appendChild(el);
         bindToolDrag(el);
         bindToolRotate(el);
@@ -970,7 +967,20 @@
         return el;
     }
 
-    function removeTool(id) { const el = document.getElementById(id); if (el) el.remove(); }
+    function toggleRuler() {
+        const existing = document.querySelector('.ruler-el');
+        if (existing) { existing.remove(); } else { createRuler(); }
+        updateToolButtonStates();
+    }
+    function toggleGeoDreieck() {
+        const existing = document.querySelector('.geo-el');
+        if (existing) { existing.remove(); } else { createGeoDreieck(); }
+        updateToolButtonStates();
+    }
+    function updateToolButtonStates() {
+        document.getElementById('btn-ruler-toggle').classList.toggle('mode-active', !!document.querySelector('.ruler-el'));
+        document.getElementById('btn-geo-toggle').classList.toggle('mode-active', !!document.querySelector('.geo-el'));
+    }
 
     function bindToolDrag(el) {
         const handle = el.querySelector('[data-drag]');
@@ -1095,6 +1105,7 @@
         (state.notes || []).forEach(n => createTextNote(n.x, n.y, n));
         (state.rulers || []).forEach(r => createRuler(r));
         (state.geos || []).forEach(g => createGeoDreieck(g));
+        updateToolButtonStates();
         if (state.ink) {
             const img = new Image();
             img.onload = () => {
