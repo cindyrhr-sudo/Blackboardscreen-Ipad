@@ -102,7 +102,7 @@
         #tools-layer { position: absolute; inset: 0; z-index: 850; pointer-events: none; }
         .tool-el { position: absolute; pointer-events: auto; touch-action: none; -webkit-user-select: none; user-select: none; }
         .tool-el .rotatable { position: relative; transform: rotate(var(--rot, 0deg)); transform-origin: center center; }
-        .geo-el .rotatable { transform: rotate(var(--rot, 0deg)) scale(calc(var(--geo-scale, 1) * var(--inst-scale, 1))); }
+        .geo-el .rotatable { transform: rotate(var(--rot, 0deg)) scale(var(--geo-scale, 1)); }
         .tool-drag, .tool-rotate-handle, .tool-del {
             position: absolute; width: 26px; height: 26px; border-radius: 50%; color: white;
             display: flex; align-items: center; justify-content: center; font-size: 14px; z-index: 5;
@@ -111,16 +111,8 @@
         .tool-drag { background: rgba(0,0,0,0.55); cursor: move; top: -13px; left: -13px; }
         .tool-rotate-handle { background: #2980b9; cursor: grab; top: -13px; right: -13px; }
         .tool-del { background: #e74c3c; cursor: pointer; z-index: 6; bottom: -13px; left: -13px; }
-        .tool-resize { background: #8e44ad; cursor: nwse-resize; bottom: -13px; right: -13px; z-index: 6; }
         .ruler-svg, .geo-svg { display: block; pointer-events: none; }
         .geo-img { display: block; pointer-events: none; width: 340px; height: auto; -webkit-user-drag: none; user-select: none; }
-        .ruler-el .tool-controls {
-            position: absolute; left: 0; top: calc(100% + 6px); background: rgba(22,27,34,0.92);
-            padding: 8px 10px; border-radius: 10px; display: flex; flex-direction: column; gap: 5px;
-            font-size: 11px; color: white; width: 190px; z-index: 10; box-shadow: 0 4px 14px rgba(0,0,0,0.4);
-        }
-        .ruler-el .tool-controls label { display: flex; justify-content: space-between; gap: 6px; align-items: center; }
-        .ruler-el .tool-controls input[type=range] { flex: 1; }
 
         #text-layer { position: absolute; inset: 0; z-index: 5; pointer-events: none; -webkit-user-select: none; user-select: none; }
         .text-note { position: absolute; min-width: 30px; min-height: 30px; pointer-events: auto; }
@@ -225,12 +217,13 @@
 </div>
 
 <div id="sidebar" class="side-panel">
-        <div class="sidebar-divider"></div>
     <button class="side-btn mode-active" id="mode-stift" onclick="setMode('stift')" title="Stift">✏️</button>
     <button class="side-btn" id="mode-linie" onclick="setMode('linie')" title="Gerade Linie">╱</button>
-    <button class="side-btn" id="btn-dashed" onclick="toggleDashed()" title="Gestrichelte Linie">┅</button>
     <button class="side-btn" id="mode-text" onclick="onTextModeClick()" title="Text">🔤</button>
     <button class="side-btn" id="mode-hand" onclick="setMode('hand')" title="Bewegen">✋</button>
+
+    <div class="sidebar-divider"></div>
+
     <button class="side-btn" onclick="createRuler()" title="Lineal einfügen">📏</button>
     <button class="side-btn" onclick="createGeoDreieck()" title="Geodreieck einfügen">📐</button>
 
@@ -257,13 +250,16 @@
     <button class="side-btn btn-small" onclick="setBoardSize(2)" id="size-2">•</button>
     <button class="side-btn btn-small" onclick="setBoardSize(8)" id="size-8">●</button>
     <button class="side-btn btn-small" onclick="setBoardSize(20)" id="size-20">⬤</button>
+    <button class="side-btn" id="btn-dashed" onclick="toggleDashed()" title="Gestrichelte Linie">┅</button>
     <button class="side-btn" id="btn-eraser" onclick="toggleEraser()" title="Radierer">🧽</button>
+
+    <div class="sidebar-divider"></div>
+
     <button class="side-btn" onclick="performUndo()" title="Rückgängig">↩️</button>
     <button class="side-btn" onclick="clearBoard()" title="Tinte löschen">🗑️</button>
 </div>
 
 <div id="menu">
-    <div class="sidebar-divider"></div>
     <button onclick="createWidget('timer', {isNew:true})">⏲️ Eieruhr</button>
     <button onclick="createWidget('wheel', {isNew:true})">🎡 Glücksrad</button>
     <button onclick="createWidget('qr', {isNew:true})">🔗 QR-Code</button>
@@ -292,6 +288,16 @@
             <div class="zoom-row">
                 <label>Größe des Geodreiecks <span id="geo-scale-value">100%</span></label>
                 <input type="range" id="geo-scale-range" min="50" max="200" step="10" value="100" oninput="setGeoScale(this.value)">
+            </div>
+
+            <h3>Lineal</h3>
+            <div class="zoom-row">
+                <label>Länge des Lineals <span id="ruler-len-value">20cm</span></label>
+                <input type="range" id="ruler-len-range" min="5" max="50" step="0.5" value="20" oninput="setRulerLen(this.value)">
+            </div>
+            <div class="zoom-row">
+                <label>Größe des Lineals <span id="ruler-scale-value">100%</span></label>
+                <input type="range" id="ruler-scale-range" min="50" max="200" step="10" value="100" oninput="setRulerScale(this.value)">
             </div>
 
             <h3>Hintergrund der Tafel</h3>
@@ -851,6 +857,8 @@
     // ---------- Geodreieck & Lineal ----------
     const PX_PER_CM = 37.8;
     let toolCounter = 0;
+    let rulerLenCm = 20;
+    let rulerScalePct = 100;
 
     function buildRulerSVG(lenCm, scalePct) {
         const scale = scalePct / 100;
@@ -874,8 +882,6 @@
 
     function createRuler(config = {}) {
         const id = config.id || 'ruler-' + (Date.now() + (toolCounter++));
-        const lenCm = config.lenCm !== undefined ? parseFloat(config.lenCm) : 20;
-        const scalePct = config.scale !== undefined ? parseInt(config.scale) : 100;
         const el = document.createElement('div');
         el.className = 'tool-el ruler-el';
         el.id = id;
@@ -883,48 +889,25 @@
         el.style.top = (config.y !== undefined ? config.y : 150) + 'px';
         el.style.setProperty('--rot', (config.rot || 0) + 'deg');
         el.dataset.rot = config.rot || 0;
-        el.dataset.lencm = lenCm;
-        el.dataset.scale = scalePct;
         el.innerHTML = `
             <div class="rotatable">
                 <div class="tool-drag" data-drag>⠿</div>
                 <div class="tool-rotate-handle" data-rotate>⟲</div>
-                <div class="ruler-body" id="body-${id}">${buildRulerSVG(lenCm, scalePct)}</div>
-                <div class="tool-resize" data-resize-corner>⤡</div>
+                <div class="ruler-body" id="body-${id}">${buildRulerSVG(rulerLenCm, rulerScalePct)}</div>
             </div>
-            <div class="tool-del" onclick="removeTool('${id}')">×</div>
-            <div class="tool-controls">
-                <label>Länge <span id="lendisp-${id}">${lenCm}cm</span></label>
-                <input type="range" min="5" max="50" step="0.5" value="${lenCm}" oninput="updateRulerLen('${id}', this.value)">
-                <label>Größe <span id="scaledisp-${id}">${scalePct}%</span></label>
-                <input type="range" id="scaleinput-${id}" min="50" max="200" step="10" value="${scalePct}" oninput="updateRulerScale('${id}', this.value)">
-            </div>`;
+            <div class="tool-del" onclick="removeTool('${id}')">×</div>`;
         document.getElementById('tools-layer').appendChild(el);
         bindToolDrag(el);
         bindToolRotate(el);
-        bindToolResize(el, {
-            getScale: () => parseInt(el.dataset.scale),
-            setScale: (v) => {
-                v = Math.max(50, Math.min(200, v));
-                updateRulerScale(id, v);
-                const slider = document.getElementById('scaleinput-' + id);
-                if (slider) slider.value = v;
-            }
-        });
         if (config.isNew) toggleMenu();
         return el;
     }
-    function updateRulerLen(id, val) {
-        const el = document.getElementById(id);
-        el.dataset.lencm = val;
-        document.getElementById('lendisp-' + id).innerText = val + 'cm';
-        document.getElementById('body-' + id).innerHTML = buildRulerSVG(parseFloat(val), parseInt(el.dataset.scale));
-    }
-    function updateRulerScale(id, val) {
-        const el = document.getElementById(id);
-        el.dataset.scale = val;
-        document.getElementById('scaledisp-' + id).innerText = val + '%';
-        document.getElementById('body-' + id).innerHTML = buildRulerSVG(parseFloat(el.dataset.lencm), parseInt(val));
+
+    function rebuildAllRulers() {
+        document.querySelectorAll('.ruler-el').forEach(el => {
+            const body = el.querySelector('.ruler-body');
+            if (body) body.innerHTML = buildRulerSVG(rulerLenCm, rulerScalePct);
+        });
     }
 
     function buildGeoSVG() {
@@ -956,7 +939,7 @@
         </svg>`;
     }
     const GEO_SVG_CACHE = buildGeoSVG();
-    const GEO_PNG_FILENAME = 'geodreieck-dark.png';
+    const GEO_PNG_FILENAME = 'geodreieck.png';
 
     function handleGeoImgError(imgEl) {
         const wrap = document.createElement('div');
@@ -966,35 +949,23 @@
 
     function createGeoDreieck(config = {}) {
         const id = config.id || 'geo-' + (Date.now() + (toolCounter++));
-        const instScale = config.instScale !== undefined ? parseInt(config.instScale) : 100;
         const el = document.createElement('div');
         el.className = 'tool-el geo-el';
         el.id = id;
         el.style.left = (config.x !== undefined ? config.x : 200) + 'px';
         el.style.top = (config.y !== undefined ? config.y : 120) + 'px';
         el.style.setProperty('--rot', (config.rot || 0) + 'deg');
-        el.style.setProperty('--inst-scale', instScale / 100);
         el.dataset.rot = config.rot || 0;
-        el.dataset.instScale = instScale;
         el.innerHTML = `
             <div class="rotatable">
                 <div class="tool-drag" data-drag>⠿</div>
                 <div class="tool-rotate-handle" data-rotate>⟲</div>
                 <img class="geo-img" src="${GEO_PNG_FILENAME}" draggable="false" onerror="handleGeoImgError(this)">
-                <div class="tool-resize" data-resize-corner>⤡</div>
             </div>
             <div class="tool-del" onclick="removeTool('${id}')">×</div>`;
         document.getElementById('tools-layer').appendChild(el);
         bindToolDrag(el);
         bindToolRotate(el);
-        bindToolResize(el, {
-            getScale: () => parseInt(el.dataset.instScale),
-            setScale: (v) => {
-                v = Math.max(30, Math.min(300, v));
-                el.dataset.instScale = v;
-                el.style.setProperty('--inst-scale', v / 100);
-            }
-        });
         if (config.isNew) toggleMenu();
         return el;
     }
@@ -1025,28 +996,6 @@
                 const rot = Math.round(angle + 90);
                 el.style.setProperty('--rot', rot + 'deg');
                 el.dataset.rot = rot;
-            };
-            const stop = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', stop); };
-            handle.addEventListener('pointermove', move);
-            handle.addEventListener('pointerup', stop);
-        });
-    }
-
-    function bindToolResize(el, api) {
-        const handle = el.querySelector('[data-resize-corner]');
-        if (!handle) return;
-        handle.addEventListener('pointerdown', (e) => {
-            e.preventDefault(); e.stopPropagation();
-            handle.setPointerCapture(e.pointerId);
-            const rect = el.getBoundingClientRect();
-            const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
-            const d0 = Math.hypot(e.clientX - cx, e.clientY - cy) || 1;
-            const startScale = api.getScale();
-            const move = (m) => {
-                const d1 = Math.hypot(m.clientX - cx, m.clientY - cy);
-                const factor = d1 / d0;
-                const newScale = Math.round(startScale * factor);
-                api.setScale(newScale);
             };
             const stop = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', stop); };
             handle.addEventListener('pointermove', move);
@@ -1085,6 +1034,26 @@
         document.getElementById('geo-scale-range').value = val;
         setGeoScale(val);
     }
+    function setRulerLen(val) {
+        rulerLenCm = parseFloat(val);
+        document.getElementById('ruler-len-value').innerText = val + 'cm';
+        localStorage.setItem('kzb-ruler-len', val);
+        rebuildAllRulers();
+    }
+    function setRulerScale(val) {
+        rulerScalePct = parseInt(val);
+        document.getElementById('ruler-scale-value').innerText = val + '%';
+        localStorage.setItem('kzb-ruler-scale', val);
+        rebuildAllRulers();
+    }
+    function restoreRulerSettings() {
+        const len = localStorage.getItem('kzb-ruler-len') || '20';
+        const scale = localStorage.getItem('kzb-ruler-scale') || '100';
+        document.getElementById('ruler-len-range').value = len;
+        document.getElementById('ruler-scale-range').value = scale;
+        setRulerLen(len);
+        setRulerScale(scale);
+    }
 
     // ---------- Zustand einer einzelnen Tafel (Widgets, Notizen, Tinte, Werkzeuge) ----------
     function gatherState() {
@@ -1112,11 +1081,11 @@
         });
         const rulerData = [];
         document.querySelectorAll('.ruler-el').forEach(r => {
-            rulerData.push({ id: r.id, x: parseInt(r.style.left), y: parseInt(r.style.top), rot: parseInt(r.dataset.rot) || 0, lenCm: parseFloat(r.dataset.lencm), scale: parseInt(r.dataset.scale) });
+            rulerData.push({ id: r.id, x: parseInt(r.style.left), y: parseInt(r.style.top), rot: parseInt(r.dataset.rot) || 0 });
         });
         const geoData = [];
         document.querySelectorAll('.geo-el').forEach(g => {
-            geoData.push({ id: g.id, x: parseInt(g.style.left), y: parseInt(g.style.top), rot: parseInt(g.dataset.rot) || 0, instScale: parseInt(g.dataset.instScale) || 100 });
+            geoData.push({ id: g.id, x: parseInt(g.style.left), y: parseInt(g.style.top), rot: parseInt(g.dataset.rot) || 0 });
         });
         return { widgets: widgetData, notes: noteData, rulers: rulerData, geos: geoData, ink: canvas.toDataURL('image/png') };
     }
@@ -1309,6 +1278,7 @@
     restoreUIZoom();
     restorePenOnly();
     restoreGeoScale();
+    restoreRulerSettings();
     restoreBgSettings();
 
     window.onload = () => {
